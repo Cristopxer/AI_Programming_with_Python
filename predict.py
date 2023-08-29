@@ -13,10 +13,12 @@ def parse():
 
     parser.add_argument('--model_path', help='Model path',
                         default='./checkpoint.pth', type=str)
+    parser.add_argument(
+        '--device', help='Choose GPU or CPU to handle the network', default='GPU', type=str)
     parser.add_argument('--image_path', help='Image path',
                         default='./flowers/train/1/image_06735.jpg', type=str)
     parser.add_argument('--category_names',
-                        help='File to crossmatch category names', default= 'cat_to_name.json', type=str)
+                        help='File to crossmatch category names', default='cat_to_name.json', type=str)
     parser.add_argument(
         '--topk', help='top classes returned', default=5, type=int)
 
@@ -26,7 +28,11 @@ def parse():
 
 
 def get_device(args):
-    args.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    if args.device == 'GPU' and torch.cuda.is_available():
+        args.device = 'cuda'
+    else:
+        args.device = 'cpu'
+
     return
 
 

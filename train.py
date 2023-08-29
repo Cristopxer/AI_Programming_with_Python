@@ -17,6 +17,10 @@ def parse():
         '--data_dir', help='Directory where the data is stored', default='./flowers', type=str)
     parser.add_argument(
         '--save_dir', help='Directory where the data is saved', default='./', type=str)
+    parser.add_argument(
+        '--model', help='Network architecture vgg16/densnet121', default='vgg16', type=str)
+    parser.add_argument(
+        '--device', help='Choose GPU or CPU to handle the network', default='GPU', type=str)
     parser.add_argument('--batch_size', help='Batch size to process images',
                         default=32, type=int)
     parser.add_argument('--lr', help='Learning rate',
@@ -32,7 +36,11 @@ def parse():
 
 
 def get_device(args):
-    args.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    if args.device == 'GPU' and torch.cuda.is_available():
+        args.device = 'cuda'
+    else:
+        args.device = 'cpu'
+
     return
 
 
@@ -77,9 +85,11 @@ def transform_data(data_dir, batch_size):
     test_loader = torch.utils.data.DataLoader(test_data, batch_size=batch_size)
 
     data_sets = {'train_data': train_data,
-                 'valid_data': valid_data, 'test_data': test_data}
+                 'valid_data': valid_data,
+                 'test_data': test_data}
     loaders = {'train_loader': train_loader,
-               'valid_loader': valid_loader, 'test_loader': test_loader}
+               'valid_loader': valid_loader,
+               'test_loader': test_loader}
 
     return data_sets, loaders
 
@@ -91,20 +101,31 @@ def get_class_labels():
 
 
 def build_model(args):
-    model = models.vgg16(pretrained=True)
+
+    if args.model == 'vgg1':
+        model = models.vgg16(pretrained=True)
+        input_units = 25088
+        hidden_units = [4096, 1024]
+
+    elif args.model == 'densnet121':
+        model = models.densenet121(pretrained=True)
+        input_units = 1024
+        hidden_units = [512, 256]
 
     for param in model.parameters():
         param.requires_grad = False
 
     dropout = args.dropout
     out_classes_num = args.out_classes
-    model.classifier = nn.Sequential(nn.Linear(25088, 4096),
+    model.classifier = nn.Sequential(nn.Linear(input_units, hidden_units[0]),
                                      nn.ReLU(),
                                      nn.Dropout(dropout),
-                                     nn.Linear(4096, 1024),
+                                     nn.Linear(
+                                         hidden_units[0], hidden_units[1]),
                                      nn.ReLU(),
                                      nn.Dropout(dropout),
-                                     nn.Linear(1024, out_classes_num),
+                                     nn.Linear(
+                                         hidden_units[1], out_classes_num),
                                      nn.LogSoftmax(dim=1))
     criterion = nn.NLLLoss()
 
@@ -113,7 +134,6 @@ def build_model(args):
     # Set model to the available device 'GPU' or 'CPU'
 
     model.to(args.device)
-    print('model moved')
 
     return model, optimizer, criterion
 
@@ -122,10 +142,11 @@ def train(args, loaders, model, optimizer, criterion):
 
     epochs = args.epochs
     steps = 0
-    running_loss = 0
     print_every = 10
-    print('starting training')
+
     for epoch in range(epochs):
+
+        running_loss = 0
         for images, labels in loaders['train_loader']:
             steps += 1
 
@@ -205,7 +226,7 @@ def save_checkpoint(model, args, optimizer, data_sets):
     torch.save({
         'epoch': args.epochs,
         'batch_size': args.batch_size,
-        'base_model': models.vgg16(),
+        'base_model': models.vgg16() if args.model == 'vgg16' else models.densenet121(),
         'classifier': model.classifier(),
         'model_state_dict': model.state_dict(),
         'optimizer_state_dict': optimizer.state_dict(),
@@ -219,6 +240,7 @@ def save_checkpoint(model, args, optimizer, data_sets):
 def main():
     args = parse()
     get_device(args)
+    print(args.device)
     data_dir = set_dir(args)
     data_sets, loaders = transform_data(data_dir, args.batch_size)
     model, optimizer, criterion = build_model(args)
